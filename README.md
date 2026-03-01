@@ -54,3 +54,4 @@ If you have already installed `uv`, you can simply run the provided shortcut scr
 - [ ] Allow saving project files to remember individual settings of csv files, batch saving results.
 - [x] Smart peak auto identification.
 - [ ] Try Anchor Point (Manual Knot) Fitting, Asymmetric Least Squares (Auto-Baselining)
+- [ ] Fix denoise: discard peaks while preserving baseline.

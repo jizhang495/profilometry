@@ -278,7 +278,7 @@ class ProfilometryApp(tk.Tk):
         )
         if save_path:
             self.fig.savefig(save_path, format="svg", bbox_inches='tight')
-            messagebox.showinfo("Saved", f"Successfully saved to:\n{save_path}")
+            # messagebox.showinfo("Saved", f"Successfully saved to:\n{save_path}")
 
     def initial_plot(self, reprocessing=False):
         self.ax_raw.clear()
