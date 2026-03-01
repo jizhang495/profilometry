@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.widgets import SpanSelector
 from scipy.signal import butter, filtfilt
+from scipy.interpolate import UnivariateSpline
 
 def load_data(filepath):
     try:
@@ -107,10 +108,15 @@ class ProfilometryApp(tk.Tk):
         row2 = ttk.Frame(top_frame)
         row2.pack(side=tk.TOP, fill=tk.X, pady=5)
         
-        self.bg_order = tk.IntVar(value=1)
-        ttk.Label(row2, text="BG Fit Order:").pack(side=tk.LEFT, padx=2)
-        ttk.Combobox(row2, textvariable=self.bg_order, values=[0, 1, 2, 3], width=3, state="readonly").pack(side=tk.LEFT, padx=2)
+        self.bg_order = tk.StringVar(value="1")
+        ttk.Label(row2, text="BG Fit:").pack(side=tk.LEFT, padx=(5, 2))
+        ttk.Combobox(row2, textvariable=self.bg_order, values=["0", "1", "2", "3", "4", "5", "6", "Spline"], width=6, state="readonly").pack(side=tk.LEFT, padx=2)
         self.bg_order.trace_add("write", lambda *args: self.process_data())
+        
+        self.spline_s_var = tk.StringVar(value="")
+        ttk.Label(row2, text="Spline s:").pack(side=tk.LEFT, padx=(5, 2))
+        ttk.Entry(row2, textvariable=self.spline_s_var, width=5).pack(side=tk.LEFT)
+        self.spline_s_var.trace_add("write", lambda *args: self.process_data())
         
         self.data_xmin_var = tk.StringVar(value="")
         self.data_xmax_var = tk.StringVar(value="")
@@ -377,9 +383,35 @@ class ProfilometryApp(tk.Tk):
                 
         y_bg = y_for_bg[bg_mask]
         
-        order = self.bg_order.get()
-        p = np.polyfit(x_bg, y_bg, order)
-        bg_fit = np.polyval(p, self.x)
+        order_str = self.bg_order.get()
+        if order_str == "Spline":
+            sort_idx = np.argsort(x_bg)
+            x_u, u_idx = np.unique(x_bg[sort_idx], return_index=True)
+            y_u = y_bg[sort_idx][u_idx]
+            
+            # Spline smoothing parameter
+            s_val = None
+            s_str = self.spline_s_var.get()
+            if s_str.strip():
+                try:
+                    s_val = float(s_str)
+                except ValueError:
+                    pass
+            
+            # Fallback to linear if not enough points for spline
+            if len(x_u) > 3:
+                spl = UnivariateSpline(x_u, y_u, s=s_val)
+                bg_fit = spl(self.x)
+            else:
+                p = np.polyfit(x_bg, y_bg, 1)
+                bg_fit = np.polyval(p, self.x)
+            order_label = "Spline"
+        else:
+            order = int(order_str)
+            p = np.polyfit(x_bg, y_bg, order)
+            bg_fit = np.polyval(p, self.x)
+            order_label = f"Order {order}"
+        
         y_corr = self.y - bg_fit
         
         self.ax_raw.clear()
@@ -392,7 +424,7 @@ class ProfilometryApp(tk.Tk):
             if np.sum(right_mask) > 0:
                 self.ax_raw.plot(self.x[right_mask], y_for_bg[right_mask], 'g-', label='_nolegend_' if np.sum(left_mask) > 0 else 'Denoised BG', alpha=0.8)
             
-        self.ax_raw.plot(self.x, bg_fit, 'C1--', label=f'BG Fit (Order {order})')
+        self.ax_raw.plot(self.x, bg_fit, 'C1--', label=f'BG Fit ({order_label})')
         self.ax_raw.axvspan(xmin, xmax, color='red', alpha=0.1, label='Selected Peak')
         if excl_min is not None and excl_max is not None:
             self.ax_raw.axvspan(excl_min, excl_max, color='gray', alpha=0.2, label='Excluded BG')
