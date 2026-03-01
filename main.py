@@ -456,47 +456,57 @@ class ProfilometryApp(tk.Tk):
         
         if len(y_peak_corr) > 0:
             self.current_height = np.max(y_peak_corr)
+            max_idx = np.argmax(y_peak_corr)
             
-            # Global peak boundary analysis (for multi-peak/double-line cases)
-            target_h = self.current_height * 0.5
-            above_half = np.where(y_peak_corr >= target_h)[0]
-            if len(above_half) > 0:
-                first_idx = above_half[0]
-                last_idx = above_half[-1]
+            # Find the main continuous blob containing the max peak
+            # Walk outwards until the signal drops to the substrate floor (e.g. 2% of max or 0)
+            base_floor = max(0, self.current_height * 0.02)
+            
+            left_blob_idx = max_idx
+            while left_blob_idx > 0 and y_peak_corr[left_blob_idx-1] > base_floor:
+                left_blob_idx -= 1
                 
-                # FWHM Interpolation
-                if first_idx > 0:
-                    x1, y1 = x_peak[first_idx-1], y_peak_corr[first_idx-1]
-                    x2, y2 = x_peak[first_idx], y_peak_corr[first_idx]
+            right_blob_idx = max_idx
+            while right_blob_idx < len(y_peak_corr) - 1 and y_peak_corr[right_blob_idx+1] > base_floor:
+                right_blob_idx += 1
+                
+            blob_x = x_peak[left_blob_idx:right_blob_idx+1]
+            blob_y = y_peak_corr[left_blob_idx:right_blob_idx+1]
+            
+            # FWHM Analysis (Outer bounds covering 50% max within the blob)
+            target_h = self.current_height * 0.5
+            above_half = np.where(blob_y >= target_h)[0]
+            if len(above_half) > 0:
+                first_h_idx = above_half[0]
+                last_h_idx = above_half[-1]
+                
+                # Interpolate left crossing
+                if first_h_idx > 0:
+                    x1, y1 = blob_x[first_h_idx-1], blob_y[first_h_idx-1]
+                    x2, y2 = blob_x[first_h_idx], blob_y[first_h_idx]
                     left_x = x1 + (target_h - y1) * (x2 - x1) / (y2 - y1) if y2 != y1 else x1
                 else:
-                    left_x = x_peak[0]
+                    left_x = blob_x[0]
                     
-                if last_idx < len(x_peak) - 1:
-                    x1, y1 = x_peak[last_idx], y_peak_corr[last_idx]
-                    x2, y2 = x_peak[last_idx+1], y_peak_corr[last_idx+1]
+                # Interpolate right crossing
+                if last_h_idx < len(blob_x) - 1:
+                    x1, y1 = blob_x[last_h_idx], blob_y[last_h_idx]
+                    x2, y2 = blob_x[last_h_idx+1], blob_y[last_h_idx+1]
                     right_x = x1 + (target_h - y1) * (x2 - x1) / (y2 - y1) if y2 != y1 else x1
                 else:
-                    right_x = x_peak[-1]
+                    right_x = blob_x[-1]
                     
                 self.current_fwhm = right_x - left_x
                 self.ax_corr.hlines(target_h, left_x, right_x, color='m', linestyle='-', linewidth=2, label=f'FWHM: {self.current_fwhm:.2f} \u03bcm')
-                
-                # Area (Base boundaries at 0.02 relative height from top)
-                base_h = self.current_height * 0.02
-                above_base = np.where(y_peak_corr >= base_h)[0]
-                left_idx = above_base[0] if len(above_base) > 0 else 0
-                right_idx = above_base[-1] if len(above_base) > 0 else len(x_peak) - 1
-                
-                if right_idx > left_idx:
-                    self.current_area = np.trapezoid(y_peak_corr[left_idx:right_idx+1], x_peak[left_idx:right_idx+1])
-                    self.ax_corr.fill_between(x_peak[left_idx:right_idx+1], 0, y_peak_corr[left_idx:right_idx+1], color='yellow', alpha=0.3, label='Integrated Area (CSA)')
-                else:
-                    self.current_area = 0.0
             else:
                 self.current_fwhm = None
-                self.current_area = np.trapezoid(y_peak_corr, x_peak) # fallback
-                self.ax_corr.fill_between(x_peak, 0, y_peak_corr, color='yellow', alpha=0.3, label='Integrated Area (CSA)')
+                
+            # Area Analysis
+            if right_blob_idx > left_blob_idx:
+                self.current_area = np.trapezoid(blob_y, blob_x)
+                self.ax_corr.fill_between(blob_x, 0, blob_y, color='yellow', alpha=0.3, label='Integrated Area (CSA)')
+            else:
+                self.current_area = 0.0
             
             self.ax_corr.legend(loc='upper right')
             
