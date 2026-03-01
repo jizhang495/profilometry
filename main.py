@@ -481,11 +481,13 @@ class ProfilometryApp(tk.Tk):
                 
                 if right_idx > left_idx:
                     self.current_area = np.trapezoid(y_peak_corr[left_idx:right_idx], x_peak[left_idx:right_idx])
+                    self.ax_corr.fill_between(x_peak[left_idx:right_idx], 0, y_peak_corr[left_idx:right_idx], color='yellow', alpha=0.3, label='Integrated Area (CSA)')
                 else:
                     self.current_area = 0.0
             else:
                 self.current_fwhm = None
                 self.current_area = np.trapezoid(y_peak_corr, x_peak) # fallback
+                self.ax_corr.fill_between(x_peak, 0, y_peak_corr, color='yellow', alpha=0.3, label='Integrated Area (CSA)')
             
             self.ax_corr.legend(loc='upper right')
             
