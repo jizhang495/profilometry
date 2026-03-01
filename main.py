@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib.widgets import SpanSelector
-from scipy.signal import butter, filtfilt
+from scipy.signal import butter, filtfilt, find_peaks, peak_widths
 from scipy.interpolate import UnivariateSpline
 
 def load_data(filepath):
@@ -30,24 +30,6 @@ def load_data(filepath):
     except Exception as e:
         messagebox.showerror("Error Loading Data", str(e))
         return None, None
-
-def calculate_fwhm(x, y):
-    half_max = np.max(y) / 2.0
-    signs = np.sign(np.add(y, -half_max))
-    zero_crossings = (signs[0:-2] != signs[1:-1])
-    zero_crossings_idx = np.where(zero_crossings)[0]
-    
-    if len(zero_crossings_idx) >= 2:
-        crossings_x = []
-        for idx in [zero_crossings_idx[0], zero_crossings_idx[-1]]:
-            x1, y1 = x[idx], y[idx]
-            x2, y2 = x[idx+1], y[idx+1]
-            if y1 != y2:
-                x0 = x1 + (half_max - y1) * (x2 - x1) / (y2 - y1)
-                crossings_x.append(x0)
-        if len(crossings_x) >= 2:
-            return abs(crossings_x[-1] - crossings_x[0]), [crossings_x[0], crossings_x[-1]]
-    return None, None
 
 def calculate_area(x, y):
     return np.trapezoid(y, x)
@@ -128,6 +110,7 @@ class ProfilometryApp(tk.Tk):
         ttk.Label(row2, text="max:").pack(side=tk.LEFT, padx=2)
         ttk.Entry(row2, textvariable=self.data_xmax_var, width=6).pack(side=tk.LEFT)
         ttk.Button(row2, text="Apply Range", command=lambda: self.apply_data_limits(reset_peak=False)).pack(side=tk.LEFT, padx=5)
+        ttk.Button(row2, text="Auto-Find", command=self.auto_find_peak).pack(side=tk.LEFT, padx=2)
         ttk.Button(row2, text="Reset Range", command=self.reset_data_limits).pack(side=tk.LEFT, padx=2)
         
         row3 = ttk.Frame(top_frame)
@@ -324,6 +307,27 @@ class ProfilometryApp(tk.Tk):
         self.peak_region = [xmin, xmax]
         self.process_data()
 
+    def auto_find_peak(self):
+        if self.x is None or self.y is None: return
+        
+        p_lin = np.polyfit(self.x, self.y, 1)
+        z_lin = self.y - np.polyval(p_lin, self.x)
+        
+        peaks, properties = find_peaks(z_lin, height=np.max(z_lin)*0.5, width=5)
+        if len(peaks) > 0:
+            main_peak_idx = peaks[np.argmax(properties['peak_heights'])]
+            widths = peak_widths(z_lin, [main_peak_idx], rel_height=0.95)
+            w_idx = widths[0][0]
+            w_um = w_idx * (self.x[1] - self.x[0])
+            mask_width = w_um * 2.0
+            
+            peak_x = self.x[main_peak_idx]
+            self.peak_region = [max(self.x[0], peak_x - mask_width/2), min(self.x[-1], peak_x + mask_width/2)]
+            
+            self.process_data()
+        else:
+            messagebox.showinfo("Auto Find", "Could not automatically identify a distinct peak.")
+
     def reset_results(self):
         self.current_height = None
         self.current_fwhm = None
@@ -452,11 +456,36 @@ class ProfilometryApp(tk.Tk):
         
         if len(y_peak_corr) > 0:
             self.current_height = np.max(y_peak_corr)
-            self.current_fwhm, crossings = calculate_fwhm(x_peak, y_peak_corr)
-            self.current_area = calculate_area(x_peak, y_peak_corr)
             
-            if self.current_fwhm is not None:
-                self.ax_corr.plot(crossings, [self.current_height/2.0, self.current_height/2.0], 'm*-', label=f'FWHM: {self.current_fwhm:.2f} \u03bcm')
+            # Sub-peak analysis
+            peaks, properties = find_peaks(y_peak_corr, height=self.current_height*0.5)
+            if len(peaks) > 0:
+                main_peak_idx = peaks[np.argmax(properties['peak_heights'])]
+                
+                # FWHM
+                widths_results = peak_widths(y_peak_corr, [main_peak_idx], rel_height=0.5)
+                full_width = widths_results[0][0]
+                self.current_fwhm = full_width * (x_peak[1] - x_peak[0])
+                
+                h = widths_results[1][0]
+                xmin_real = x_peak[0] + widths_results[2][0] * (x_peak[1] - x_peak[0])
+                xmax_real = x_peak[0] + widths_results[3][0] * (x_peak[1] - x_peak[0])
+                self.ax_corr.hlines(h, xmin_real, xmax_real, color='m', linestyle='-', linewidth=2, label=f'FWHM: {self.current_fwhm:.2f} \u03bcm')
+                
+                # Area
+                base_widths = peak_widths(y_peak_corr, [main_peak_idx], rel_height=0.98)
+                left_idx = int(base_widths[2][0])
+                right_idx = int(base_widths[3][0])
+                left_idx = max(0, left_idx)
+                right_idx = min(len(x_peak)-1, right_idx)
+                
+                if right_idx > left_idx:
+                    self.current_area = np.trapezoid(y_peak_corr[left_idx:right_idx], x_peak[left_idx:right_idx])
+                else:
+                    self.current_area = 0.0
+            else:
+                self.current_fwhm = None
+                self.current_area = np.trapezoid(y_peak_corr, x_peak) # fallback
             
             self.ax_corr.legend(loc='upper right')
             

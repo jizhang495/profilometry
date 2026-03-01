@@ -48,4 +48,4 @@ uv run main.py
 
 ## TODOs
 - [ ] Allow saving project files to remember individual settings of csv files, batch saving results.
-- [ ] Smart peak auto identification.
+- [x] Smart peak auto identification.
