@@ -457,31 +457,40 @@ class ProfilometryApp(tk.Tk):
         if len(y_peak_corr) > 0:
             self.current_height = np.max(y_peak_corr)
             
-            # Sub-peak analysis
-            peaks, properties = find_peaks(y_peak_corr, height=self.current_height*0.5)
-            if len(peaks) > 0:
-                main_peak_idx = peaks[np.argmax(properties['peak_heights'])]
+            # Global peak boundary analysis (for multi-peak/double-line cases)
+            target_h = self.current_height * 0.5
+            above_half = np.where(y_peak_corr >= target_h)[0]
+            if len(above_half) > 0:
+                first_idx = above_half[0]
+                last_idx = above_half[-1]
                 
-                # FWHM
-                widths_results = peak_widths(y_peak_corr, [main_peak_idx], rel_height=0.5)
-                full_width = widths_results[0][0]
-                self.current_fwhm = full_width * (x_peak[1] - x_peak[0])
+                # FWHM Interpolation
+                if first_idx > 0:
+                    x1, y1 = x_peak[first_idx-1], y_peak_corr[first_idx-1]
+                    x2, y2 = x_peak[first_idx], y_peak_corr[first_idx]
+                    left_x = x1 + (target_h - y1) * (x2 - x1) / (y2 - y1) if y2 != y1 else x1
+                else:
+                    left_x = x_peak[0]
+                    
+                if last_idx < len(x_peak) - 1:
+                    x1, y1 = x_peak[last_idx], y_peak_corr[last_idx]
+                    x2, y2 = x_peak[last_idx+1], y_peak_corr[last_idx+1]
+                    right_x = x1 + (target_h - y1) * (x2 - x1) / (y2 - y1) if y2 != y1 else x1
+                else:
+                    right_x = x_peak[-1]
+                    
+                self.current_fwhm = right_x - left_x
+                self.ax_corr.hlines(target_h, left_x, right_x, color='m', linestyle='-', linewidth=2, label=f'FWHM: {self.current_fwhm:.2f} \u03bcm')
                 
-                h = widths_results[1][0]
-                xmin_real = x_peak[0] + widths_results[2][0] * (x_peak[1] - x_peak[0])
-                xmax_real = x_peak[0] + widths_results[3][0] * (x_peak[1] - x_peak[0])
-                self.ax_corr.hlines(h, xmin_real, xmax_real, color='m', linestyle='-', linewidth=2, label=f'FWHM: {self.current_fwhm:.2f} \u03bcm')
-                
-                # Area
-                base_widths = peak_widths(y_peak_corr, [main_peak_idx], rel_height=0.98)
-                left_idx = int(base_widths[2][0])
-                right_idx = int(base_widths[3][0])
-                left_idx = max(0, left_idx)
-                right_idx = min(len(x_peak)-1, right_idx)
+                # Area (Base boundaries at 0.02 relative height from top)
+                base_h = self.current_height * 0.02
+                above_base = np.where(y_peak_corr >= base_h)[0]
+                left_idx = above_base[0] if len(above_base) > 0 else 0
+                right_idx = above_base[-1] if len(above_base) > 0 else len(x_peak) - 1
                 
                 if right_idx > left_idx:
-                    self.current_area = np.trapezoid(y_peak_corr[left_idx:right_idx], x_peak[left_idx:right_idx])
-                    self.ax_corr.fill_between(x_peak[left_idx:right_idx], 0, y_peak_corr[left_idx:right_idx], color='yellow', alpha=0.3, label='Integrated Area (CSA)')
+                    self.current_area = np.trapezoid(y_peak_corr[left_idx:right_idx+1], x_peak[left_idx:right_idx+1])
+                    self.ax_corr.fill_between(x_peak[left_idx:right_idx+1], 0, y_peak_corr[left_idx:right_idx+1], color='yellow', alpha=0.3, label='Integrated Area (CSA)')
                 else:
                     self.current_area = 0.0
             else:
