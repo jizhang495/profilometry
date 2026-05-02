@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Profilometry Data Analyzer</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./vendor/plotly-2.35.2.min.js"></script>
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>Profilometry Analyzer</h1>
+        <div id="fileLabel" class="file-label">No file loaded</div>
+      </div>
+      <div class="toolbar">
+        <input id="fileInput" class="hidden-input" type="file" accept=".csv,text/csv">
+        <label class="button" for="fileInput">Load CSV</label>
+        <input id="folderInput" class="hidden-input" type="file" accept=".csv,text/csv" webkitdirectory multiple>
+        <label class="button" for="folderInput">Load Folder</label>
+        <button id="prevBtn" type="button" disabled>&lt; Prev</button>
+        <button id="nextBtn" type="button" disabled>Next &gt;</button>
+        <button id="saveSvgBtn" type="button" disabled>Save SVG</button>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <section class="workspace">
+        <div class="control-band">
+          <label>
+            BG Fit
+            <select id="bgOrder">
+              <option value="0">0</option>
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="Spline">Spline</option>
+            </select>
+          </label>
+          <label>
+            Spline s
+            <input id="splineS" type="number" step="any" inputmode="decimal">
+          </label>
+          <label>
+            Data min
+            <input id="dataMin" type="number" step="any" inputmode="decimal">
+          </label>
+          <label>
+            Data max
+            <input id="dataMax" type="number" step="any" inputmode="decimal">
+          </label>
+          <button id="applyRangeBtn" type="button">Apply Range</button>
+          <button id="resetRangeBtn" type="button">Reset Range</button>
+          <button id="autoFindBtn" type="button" disabled>Auto-Find</button>
+        </div>
+
+        <div class="control-band secondary">
+          <label class="check-label">
+            <input id="denoise" type="checkbox">
+            Denoise BG
+          </label>
+          <label>
+            Cutoff (&micro;m)
+            <input id="cutoff" type="number" step="any" inputmode="decimal" value="10.0">
+          </label>
+          <label>
+            Exclude BG min
+            <input id="exclMin" type="number" step="any" inputmode="decimal">
+          </label>
+          <label>
+            Exclude BG max
+            <input id="exclMax" type="number" step="any" inputmode="decimal">
+          </label>
+          <label>
+            Peak min
+            <input id="peakMin" type="number" step="any" inputmode="decimal">
+          </label>
+          <label>
+            Peak max
+            <input id="peakMax" type="number" step="any" inputmode="decimal">
+          </label>
+          <button id="applyPeakBtn" type="button" disabled>Apply Peak</button>
+        </div>
+
+        <div class="metric-strip">
+          <div>
+            <span>Peak Height</span>
+            <strong id="heightMetric">N/A</strong>
+          </div>
+          <div>
+            <span>FWHM</span>
+            <strong id="fwhmMetric">N/A</strong>
+          </div>
+          <div>
+            <span>Cross-sectional Area</span>
+            <strong id="areaMetric">N/A</strong>
+          </div>
+        </div>
+
+        <div id="status" class="status" role="status"></div>
+
+        <div class="plot-stack">
+          <div id="rawPlot" class="plot"></div>
+          <div id="corrPlot" class="plot"></div>
+        </div>
+      </section>
+
+      <aside class="results-panel">
+        <div class="results-header">
+          <h2>Saved Results</h2>
+          <button id="addResultBtn" type="button" disabled>Add Data</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Filename</th>
+                <th>Height</th>
+                <th>FWHM</th>
+                <th>Area</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody">
+              <tr class="empty-row">
+                <td colspan="5">No saved results</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="results-actions">
+          <button id="deleteSelectedBtn" type="button" disabled>Delete Selected</button>
+          <button id="clearResultsBtn" type="button" disabled>Clear Data</button>
+          <button id="exportCsvBtn" type="button" disabled>Export CSV</button>
+        </div>
+      </aside>
+    </main>
+  </body>
+</html>

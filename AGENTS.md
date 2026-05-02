@@ -17,3 +17,7 @@ Write code in the `profilometry/` directory to analyze profilometry data of the 
 - **Package Management:** Utilize `uv` for minimal constraint python package management.
 - **Documentation:** Provide a `README.md` detailing how to use the codebase.
 - **Requirement Tracking:** Create an `AGENTS.md` explicitly defining these requirements.
+
+## Additional Requirements
+- **Web Application:** Add a browser-based implementation of the analyzer while keeping the Python/Tkinter implementation intact.
+- **Implementation Parity:** The web application should support CSV/folder loading, visual peak selection, background fitting/subtraction, FWHM and cross-sectional area extraction, saved result rows, CSV export, and plot export.
