@@ -610,14 +610,16 @@ class ProfilometryApp(tk.Tk):
         self.ax_corr.axvspan(avg_min, avg_max, color='cyan', alpha=0.14, label='Average Region')
         self.ax_corr.hlines(avg_height, avg_min, avg_max, color='C0', linestyle='--',
                             linewidth=2, label=f'Average Height: {avg_height:.2f} \u03bcm')
-        self.ax_corr.text(
-            (avg_min + avg_max) / 2,
-            avg_height,
+        self.ax_corr.annotate(
             f"Average height: {avg_height:.4f} \u03bcm",
+            xy=((avg_min + avg_max) / 2, avg_height),
+            xytext=(0, 18),
+            textcoords='offset points',
             ha='center',
             va='bottom',
             fontsize=10,
-            bbox=dict(facecolor='white', alpha=0.85, edgecolor='none')
+            annotation_clip=False,
+            bbox=dict(facecolor='white', alpha=0.65, edgecolor='none')
         )
 
     def add_to_table(self):

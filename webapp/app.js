@@ -1192,8 +1192,8 @@ function renderAnalysisPlots() {
       y: metrics.averageHeight,
       text: `Average height: ${formatNumber(metrics.averageHeight)} \u03bcm`,
       showarrow: false,
-      yshift: 16,
-      bgcolor: "rgba(255,255,255,0.85)",
+      yshift: 28,
+      bgcolor: "rgba(255,255,255,0.68)",
       bordercolor: "#d7dedb",
       borderwidth: 1,
       font: { size: 12 }
