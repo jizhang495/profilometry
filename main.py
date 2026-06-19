@@ -49,10 +49,14 @@ class ProfilometryApp(tk.Tk):
         self.csv_files = []
         self.current_idx = 0
         self.peak_region = [None, None]
+        self.average_region = [None, None]
         
         self.current_height = None
         self.current_fwhm = None
         self.current_area = None
+        self.current_average_height = None
+        self.current_corr_x = None
+        self.current_corr_y = None
         
         self.setup_ui()
         
@@ -135,11 +139,13 @@ class ProfilometryApp(tk.Tk):
         self.res_height = tk.StringVar(value="Peak Height: N/A")
         self.res_fwhm = tk.StringVar(value="FWHM: N/A")
         self.res_area = tk.StringVar(value="Cross-sectional Area: N/A")
+        self.res_average = tk.StringVar(value="Average Height: N/A")
         ttk.Label(res_frame, textvariable=self.res_height, font=("TkDefaultFont", 10, "bold")).pack(side=tk.LEFT, padx=10)
         ttk.Label(res_frame, textvariable=self.res_fwhm, font=("TkDefaultFont", 10, "bold")).pack(side=tk.LEFT, padx=10)
         ttk.Label(res_frame, textvariable=self.res_area, font=("TkDefaultFont", 10, "bold")).pack(side=tk.LEFT, padx=10)
+        ttk.Label(res_frame, textvariable=self.res_average, font=("TkDefaultFont", 10, "bold")).pack(side=tk.LEFT, padx=10)
         
-        ttk.Label(left_frame, text="Drag on the TOP graph to select the peak region. Data outside this region will be used for BG subtraction.").pack(side=tk.TOP, pady=2)
+        ttk.Label(left_frame, text="Drag on the TOP graph to select the peak region. Drag on the BOTTOM graph to measure average height.").pack(side=tk.TOP, pady=2)
         
         self.fig, (self.ax_raw, self.ax_corr) = plt.subplots(2, 1, figsize=(8, 8))
         self.fig.subplots_adjust(hspace=0.4, top=0.92, bottom=0.08, left=0.1, right=0.95)
@@ -151,9 +157,7 @@ class ProfilometryApp(tk.Tk):
         toolbar.update()
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         
-        self.span = SpanSelector(self.ax_raw, self.on_select, 'horizontal', useblit=True,
-                                 props=dict(alpha=0.2, facecolor='red'),
-                                 interactive=True, drag_from_anywhere=True)
+        self.create_span_selectors()
 
         # --- Right Frame (Data Table) ---
         table_label = ttk.Label(right_frame, text="Saved Results", font=("TkDefaultFont", 12, "bold"))
@@ -299,13 +303,64 @@ class ProfilometryApp(tk.Tk):
         
         self.canvas.draw()
         
+        self.create_span_selectors()
+
+    def create_span_selectors(self):
         self.span = SpanSelector(self.ax_raw, self.on_select, 'horizontal', useblit=True,
                                  props=dict(alpha=0.2, facecolor='red'),
                                  interactive=True, drag_from_anywhere=True)
+        self.avg_span = SpanSelector(self.ax_corr, self.on_average_select, 'horizontal', useblit=True,
+                                     props=dict(alpha=0.2, facecolor='cyan'),
+                                     interactive=True, drag_from_anywhere=True)
 
     def on_select(self, xmin, xmax):
         self.peak_region = [xmin, xmax]
         self.process_data()
+
+    def on_average_select(self, xmin, xmax):
+        if self.current_corr_x is None or self.current_corr_y is None:
+            return
+
+        stats = self.calculate_region_average(self.current_corr_x, self.current_corr_y, xmin, xmax)
+        if stats is None:
+            return
+
+        avg_min, avg_max, avg_height = stats
+        self.average_region = [avg_min, avg_max]
+        self.current_average_height = avg_height
+        self.res_average.set(f"Average Height: {avg_height:.4f} \u03bcm")
+        self.process_data()
+
+    @staticmethod
+    def calculate_region_average(x, y, xmin, xmax):
+        if x is None or y is None or len(x) == 0:
+            return None
+
+        x = np.asarray(x, dtype=float)
+        y = np.asarray(y, dtype=float)
+        finite_mask = np.isfinite(x) & np.isfinite(y)
+        if not np.any(finite_mask):
+            return None
+
+        x = x[finite_mask]
+        y = y[finite_mask]
+        sort_idx = np.argsort(x)
+        x = x[sort_idx]
+        y = y[sort_idx]
+        x, unique_idx = np.unique(x, return_index=True)
+        y = y[unique_idx]
+
+        avg_min, avg_max = sorted((xmin, xmax))
+        avg_min = max(avg_min, x[0])
+        avg_max = min(avg_max, x[-1])
+        if avg_max <= avg_min:
+            return None
+
+        interior_mask = (x > avg_min) & (x < avg_max)
+        region_x = np.concatenate(([avg_min], x[interior_mask], [avg_max]))
+        region_y = np.interp(region_x, x, y)
+        avg_height = np.trapezoid(region_y, region_x) / (avg_max - avg_min)
+        return avg_min, avg_max, avg_height
 
     def auto_find_peak(self):
         if self.x is None or self.y is None: return
@@ -332,10 +387,15 @@ class ProfilometryApp(tk.Tk):
         self.current_height = None
         self.current_fwhm = None
         self.current_area = None
+        self.current_average_height = None
+        self.current_corr_x = None
+        self.current_corr_y = None
+        self.average_region = [None, None]
         
         self.res_height.set("Peak Height: N/A")
         self.res_fwhm.set("FWHM: N/A")
         self.res_area.set("Cross-sectional Area: N/A")
+        self.res_average.set("Average Height: N/A")
 
     def process_data(self, *args):
         if self.x is None or self.y is None or self.peak_region[0] is None:
@@ -438,13 +498,12 @@ class ProfilometryApp(tk.Tk):
         self.ax_raw.set_ylabel("Profile (\u03bcm)")
         self.ax_raw.legend(loc='upper right')
         
-        self.span = SpanSelector(self.ax_raw, self.on_select, 'horizontal', useblit=True,
-                                 props=dict(alpha=0.2, facecolor='red'),
-                                 interactive=True, drag_from_anywhere=True)
-        self.span.extents = (xmin, xmax)
-        
         x_peak = self.x[peak_mask]
         y_peak_corr = y_corr[peak_mask]
+        self.current_corr_x = x_peak
+        self.current_corr_y = y_peak_corr
+        self.current_average_height = None
+        self.res_average.set("Average Height: N/A")
         
         self.ax_corr.clear()
         self.ax_corr.plot(x_peak, y_peak_corr, 'C2-', label='Subtracted Peak')
@@ -508,6 +567,7 @@ class ProfilometryApp(tk.Tk):
             else:
                 self.current_area = 0.0
             
+            self.draw_average_region()
             self.ax_corr.legend(loc='upper right')
             
             text_str = f"Cross-sectional Area: {self.current_area:.4f} \u03bcm\u00b2"
@@ -520,7 +580,45 @@ class ProfilometryApp(tk.Tk):
             self.res_fwhm.set(f"FWHM: {self.current_fwhm:.4f} \u03bcm" if self.current_fwhm is not None else "FWHM: N/A")
             self.res_area.set(f"Cross-sectional Area: {self.current_area:.4f} \u03bcm\u00b2")
         
+        self.create_span_selectors()
+        self.span.extents = (xmin, xmax)
+        if self.average_region[0] is not None and self.average_region[1] is not None:
+            self.avg_span.extents = (self.average_region[0], self.average_region[1])
         self.canvas.draw()
+
+    def draw_average_region(self):
+        if self.average_region[0] is None or self.average_region[1] is None:
+            return
+
+        stats = self.calculate_region_average(
+            self.current_corr_x,
+            self.current_corr_y,
+            self.average_region[0],
+            self.average_region[1]
+        )
+        if stats is None:
+            self.average_region = [None, None]
+            self.current_average_height = None
+            self.res_average.set("Average Height: N/A")
+            return
+
+        avg_min, avg_max, avg_height = stats
+        self.average_region = [avg_min, avg_max]
+        self.current_average_height = avg_height
+        self.res_average.set(f"Average Height: {avg_height:.4f} \u03bcm")
+
+        self.ax_corr.axvspan(avg_min, avg_max, color='cyan', alpha=0.14, label='Average Region')
+        self.ax_corr.hlines(avg_height, avg_min, avg_max, color='C0', linestyle='--',
+                            linewidth=2, label=f'Average Height: {avg_height:.2f} \u03bcm')
+        self.ax_corr.text(
+            (avg_min + avg_max) / 2,
+            avg_height,
+            f"Average height: {avg_height:.4f} \u03bcm",
+            ha='center',
+            va='bottom',
+            fontsize=10,
+            bbox=dict(facecolor='white', alpha=0.85, edgecolor='none')
+        )
 
     def add_to_table(self):
         if not self.filepath:

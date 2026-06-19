@@ -7,6 +7,7 @@ const state = {
   x: [],
   y: [],
   peakRegion: null,
+  averageRegion: null,
   metrics: null,
   results: []
 };
@@ -20,6 +21,7 @@ const plotConfig = {
 };
 
 let rawSelectionHandlerBound = false;
+let corrSelectionHandlerBound = false;
 
 document.addEventListener("DOMContentLoaded", () => {
   cacheElements();
@@ -53,6 +55,7 @@ function cacheElements() {
     "heightMetric",
     "fwhmMetric",
     "areaMetric",
+    "averageMetric",
     "status",
     "rawPlot",
     "corrPlot",
@@ -141,6 +144,7 @@ async function loadCurrentFile(index) {
     state.fullX = parsed.x;
     state.fullY = parsed.y;
     state.peakRegion = null;
+    state.averageRegion = null;
     state.metrics = null;
 
     updateFileLabel();
@@ -316,6 +320,7 @@ function applyDataLimits(resetPeak) {
 
   if (resetPeak) {
     state.peakRegion = null;
+    state.averageRegion = null;
     clearPeakInputs();
   } else if (state.peakRegion) {
     const clipped = [
@@ -323,6 +328,9 @@ function applyDataLimits(resetPeak) {
       Math.min(state.peakRegion[1], x[x.length - 1])
     ];
     state.peakRegion = clipped[0] < clipped[1] ? clipped : null;
+    if (!state.peakRegion) {
+      state.averageRegion = null;
+    }
     updatePeakInputs();
   }
 
@@ -372,6 +380,24 @@ function setPeakRegion(x0, x1) {
 
   state.peakRegion = [min, max];
   updatePeakInputs();
+  processData();
+}
+
+function setAverageRegion(x0, x1) {
+  if (!state.metrics || !state.metrics.xPeak.length) {
+    setStatus("Select a peak region before measuring average height.", "warn");
+    return;
+  }
+
+  const min = Math.max(Math.min(x0, x1), state.metrics.xPeak[0]);
+  const max = Math.min(Math.max(x0, x1), state.metrics.xPeak[state.metrics.xPeak.length - 1]);
+
+  if (min >= max) {
+    setStatus("Average-height region is outside the corrected plot range.", "error");
+    return;
+  }
+
+  state.averageRegion = [min, max];
   processData();
 }
 
@@ -433,11 +459,22 @@ function processData() {
   const yCorr = state.y.map((yVal, i) => yVal - bgFit[i]);
   const peakData = extractPeakData(state.x, yCorr, peakMask);
   const metrics = calculateMetrics(peakData.x, peakData.y);
+  const averageSelection = state.averageRegion
+    ? calculateRegionAverage(peakData.x, peakData.y, state.averageRegion[0], state.averageRegion[1])
+    : null;
+
+  if (state.averageRegion && !averageSelection) {
+    state.averageRegion = null;
+  } else if (averageSelection) {
+    state.averageRegion = averageSelection.region;
+  }
 
   state.metrics = {
     ...metrics,
     xPeak: peakData.x,
     yPeak: peakData.y,
+    averageRegion: averageSelection ? averageSelection.region : null,
+    averageHeight: averageSelection ? averageSelection.average : null,
     yCorr,
     bgFit,
     yForBg,
@@ -856,6 +893,59 @@ function trapezoid(x, y) {
   return area;
 }
 
+function calculateRegionAverage(x, y, x0, x1) {
+  if (!x.length || !y.length) {
+    return null;
+  }
+
+  const min = Math.max(Math.min(x0, x1), x[0]);
+  const max = Math.min(Math.max(x0, x1), x[x.length - 1]);
+  if (min >= max) {
+    return null;
+  }
+
+  const regionX = [min];
+  for (const xVal of x) {
+    if (xVal > min && xVal < max) {
+      regionX.push(xVal);
+    }
+  }
+  regionX.push(max);
+
+  const regionY = regionX.map((xVal) => interpolateLineValue(x, y, xVal));
+  const average = trapezoid(regionX, regionY) / (max - min);
+  return {
+    region: [min, max],
+    average
+  };
+}
+
+function interpolateLineValue(x, y, value) {
+  if (value <= x[0]) {
+    return y[0];
+  }
+
+  const last = x.length - 1;
+  if (value >= x[last]) {
+    return y[last];
+  }
+
+  for (let i = 1; i < x.length; i += 1) {
+    if (x[i] >= value) {
+      const x0 = x[i - 1];
+      const x1 = x[i];
+      const y0 = y[i - 1];
+      const y1 = y[i];
+      if (x1 === x0) {
+        return y0;
+      }
+      return y0 + (value - x0) * (y1 - y0) / (x1 - x0);
+    }
+  }
+
+  return y[last];
+}
+
 function autoFindPeak() {
   if (!state.x.length || !state.y.length) {
     return;
@@ -923,10 +1013,11 @@ function renderEmptyPlots() {
   Plotly.newPlot(
     els.corrPlot,
     [],
-    makePlotLayout("Background Subtracted Data", "Lateral (\u03bcm)", "Profile (\u03bcm)", "zoom"),
+    makePlotLayout("Background Subtracted Data", "Lateral (\u03bcm)", "Profile (\u03bcm)", "select"),
     plotConfig
   );
   bindRawSelectionHandler();
+  bindCorrSelectionHandler();
 }
 
 function renderInitialPlots() {
@@ -948,10 +1039,11 @@ function renderInitialPlots() {
   Plotly.react(
     els.corrPlot,
     [],
-    makePlotLayout("Background Subtracted Data", "Lateral (\u03bcm)", "Profile (\u03bcm)", "zoom"),
+    makePlotLayout("Background Subtracted Data", "Lateral (\u03bcm)", "Profile (\u03bcm)", "select"),
     plotConfig
   );
   bindRawSelectionHandler();
+  bindCorrSelectionHandler();
 }
 
 function renderAnalysisPlots() {
@@ -1028,7 +1120,7 @@ function renderAnalysisPlots() {
     });
   }
 
-  const corrLayout = makePlotLayout("Background Subtracted Data", "Lateral (\u03bcm)", "Profile (\u03bcm)", "zoom");
+  const corrLayout = makePlotLayout("Background Subtracted Data", "Lateral (\u03bcm)", "Profile (\u03bcm)", "select");
   corrLayout.shapes = [];
 
   if (metrics.fwhm !== null) {
@@ -1071,7 +1163,45 @@ function renderAnalysisPlots() {
     });
   }
 
+  if (metrics.averageRegion && Number.isFinite(metrics.averageHeight)) {
+    const [avgMin, avgMax] = metrics.averageRegion;
+    corrLayout.shapes.push({
+      type: "rect",
+      xref: "x",
+      yref: "paper",
+      x0: avgMin,
+      x1: avgMax,
+      y0: 0,
+      y1: 1,
+      fillcolor: "rgba(14, 165, 233, 0.14)",
+      line: { width: 0 },
+      layer: "below"
+    });
+    corrLayout.shapes.push({
+      type: "line",
+      xref: "x",
+      yref: "y",
+      x0: avgMin,
+      x1: avgMax,
+      y0: metrics.averageHeight,
+      y1: metrics.averageHeight,
+      line: { color: "#0284c7", width: 3, dash: "dash" }
+    });
+    corrLayout.annotations = (corrLayout.annotations || []).concat({
+      x: (avgMin + avgMax) / 2,
+      y: metrics.averageHeight,
+      text: `Average height: ${formatNumber(metrics.averageHeight)} \u03bcm`,
+      showarrow: false,
+      yshift: 16,
+      bgcolor: "rgba(255,255,255,0.85)",
+      bordercolor: "#d7dedb",
+      borderwidth: 1,
+      font: { size: 12 }
+    });
+  }
+
   Plotly.react(els.corrPlot, corrTraces, corrLayout, plotConfig);
+  bindCorrSelectionHandler();
 }
 
 function peakAndExclusionShapes(exclusion) {
@@ -1118,6 +1248,7 @@ function makePlotLayout(title, xTitle, yTitle, dragmode) {
     plot_bgcolor: "#fbfcfc",
     hovermode: "closest",
     dragmode,
+    selectdirection: dragmode === "select" ? "h" : "any",
     uirevision: state.currentName || "empty",
     xaxis: {
       title: xTitle,
@@ -1162,6 +1293,27 @@ function bindRawSelectionHandler() {
   rawSelectionHandlerBound = true;
 }
 
+function bindCorrSelectionHandler() {
+  if (corrSelectionHandlerBound || !els.corrPlot || !els.corrPlot.on) {
+    return;
+  }
+
+  els.corrPlot.on("plotly_selected", (event) => {
+    let range = event && event.range && event.range.x;
+
+    if (!range && event && event.points && event.points.length) {
+      const xs = event.points.map((point) => point.x);
+      range = [Math.min(...xs), Math.max(...xs)];
+    }
+
+    if (range && range.length === 2 && range[0] !== range[1]) {
+      setAverageRegion(range[0], range[1]);
+    }
+  });
+
+  corrSelectionHandlerBound = true;
+}
+
 function renderMetrics() {
   const metrics = state.metrics;
 
@@ -1173,6 +1325,9 @@ function renderMetrics() {
     : "N/A";
   els.areaMetric.textContent = metrics && metrics.area !== null
     ? `${formatNumber(metrics.area)} \u03bcm\u00b2`
+    : "N/A";
+  els.averageMetric.textContent = metrics && Number.isFinite(metrics.averageHeight)
+    ? `${formatNumber(metrics.averageHeight)} \u03bcm`
     : "N/A";
 }
 
