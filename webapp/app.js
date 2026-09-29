@@ -9,6 +9,7 @@ const state = {
   peakRegion: null,
   averageRegion: null,
   metrics: null,
+  appendingAverage: false,
   results: []
 };
 
@@ -93,7 +94,7 @@ function bindEvents() {
     }
   });
 
-  els.saveSvgBtn.addEventListener("click", saveCurrentSvgs);
+  els.saveSvgBtn.addEventListener("click", () => saveCurrentSvgs());
   els.applyRangeBtn.addEventListener("click", () => applyDataLimits(false));
   els.resetRangeBtn.addEventListener("click", resetDataLimits);
   els.autoFindBtn.addEventListener("click", autoFindPeak);
@@ -1349,7 +1350,8 @@ function addCurrentResult() {
   renderResults();
 }
 
-function appendAverageHeight() {
+async function appendAverageHeight() {
+  if (state.appendingAverage) return;
   const result = state.results[state.results.length - 1];
   if (!result || !Number.isFinite(state.metrics?.averageHeight)) {
     setStatus("Add Data and select an average-height region on the bottom graph first.", "warn");
@@ -1361,8 +1363,20 @@ function appendAverageHeight() {
     return;
   }
   result.averageHeights[slot] = state.metrics.averageHeight;
+  const filename = `${stripExtension(baseFileName(state.currentName))}-h${slot + 1}.svg`;
+  state.appendingAverage = true;
   renderResults();
-  setStatus(`Saved h${slot + 1} to ${result.filename}.`, "");
+  try {
+    const saved = await saveCurrentSvgs(filename);
+    if (saved) {
+      setStatus(`Saved h${slot + 1} to ${result.filename}; SVG download started: ${filename}.`, "");
+    } else {
+      result.averageHeights[slot] = null;
+    }
+  } finally {
+    state.appendingAverage = false;
+    renderResults();
+  }
 }
 
 function renderResults() {
@@ -1428,7 +1442,7 @@ function exportResultsCsv() {
   downloadBlob("profilometry_results.csv", csv, "text/csv;charset=utf-8");
 }
 
-async function saveCurrentSvgs() {
+async function saveCurrentSvgs(filename = null) {
   if (!state.currentName) {
     return;
   }
@@ -1456,9 +1470,11 @@ async function saveCurrentSvgs() {
       `<image href="${escapeHtml(corrSvg)}" xlink:href="${escapeHtml(corrSvg)}" x="0" y="${rawHeight + 24}" width="${corrWidth}" height="${corrHeight}"/>`,
       "</svg>"
     ].join("");
-    downloadBlob(`${base}-plots.svg`, svg, "image/svg+xml;charset=utf-8");
+    downloadBlob(filename || `${base}-plots.svg`, svg, "image/svg+xml;charset=utf-8");
+    return true;
   } catch (error) {
     setStatus(`Could not export SVG: ${error.message}`, "error");
+    return false;
   }
 }
 
@@ -1492,7 +1508,7 @@ function updateResultsButtons() {
   const hasSelected = state.results.some((result) => result.selected);
 
   const latestResult = state.results[state.results.length - 1];
-  els.appendAverageBtn.disabled = !latestResult
+  els.appendAverageBtn.disabled = state.appendingAverage || !latestResult
     || !Number.isFinite(state.metrics?.averageHeight)
     || !latestResult.averageHeights.includes(null);
   els.deleteSelectedBtn.disabled = !hasSelected;

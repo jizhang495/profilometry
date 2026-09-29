@@ -651,6 +651,12 @@ class ProfilometryApp(tk.Tk):
         values = list(self.tree.item(item, "values"))
         for slot in range(4, 9):
             if values[slot] == "":
+                save_path = f"{os.path.splitext(self.filepath)[0]}-h{slot - 3}.svg"
+                try:
+                    self.fig.savefig(save_path, format="svg", bbox_inches='tight')
+                except Exception as error:
+                    messagebox.showerror("SVG Export Failed", f"Could not save {save_path}:\n{error}\n\nThe measurement was not appended. Try again after fixing the save location.")
+                    return
                 values[slot] = f"{self.current_average_height:.4f}"
                 self.tree.item(item, values=values)
                 self.tree.see(item)
