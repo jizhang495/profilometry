@@ -60,6 +60,7 @@ function cacheElements() {
     "rawPlot",
     "corrPlot",
     "addResultBtn",
+    "appendAverageBtn",
     "resultsBody",
     "deleteSelectedBtn",
     "clearResultsBtn",
@@ -98,6 +99,7 @@ function bindEvents() {
   els.autoFindBtn.addEventListener("click", autoFindPeak);
   els.applyPeakBtn.addEventListener("click", applyManualPeak);
   els.addResultBtn.addEventListener("click", addCurrentResult);
+  els.appendAverageBtn.addEventListener("click", appendAverageHeight);
   els.deleteSelectedBtn.addEventListener("click", deleteSelectedResults);
   els.clearResultsBtn.addEventListener("click", clearResults);
   els.exportCsvBtn.addEventListener("click", exportResultsCsv);
@@ -1341,9 +1343,26 @@ function addCurrentResult() {
     filename: stripExtension(baseFileName(state.currentName)),
     height: state.metrics.height,
     fwhm: state.metrics.fwhm,
-    area: state.metrics.area
+    area: state.metrics.area,
+    averageHeights: Array(5).fill(null)
   });
   renderResults();
+}
+
+function appendAverageHeight() {
+  const result = state.results[state.results.length - 1];
+  if (!result || !Number.isFinite(state.metrics?.averageHeight)) {
+    setStatus("Add Data and select an average-height region on the bottom graph first.", "warn");
+    return;
+  }
+  const slot = result.averageHeights.indexOf(null);
+  if (slot === -1) {
+    setStatus("The latest row already has five average-height measurements.", "warn");
+    return;
+  }
+  result.averageHeights[slot] = state.metrics.averageHeight;
+  renderResults();
+  setStatus(`Saved h${slot + 1} to ${result.filename}.`, "");
 }
 
 function renderResults() {
@@ -1352,7 +1371,7 @@ function renderResults() {
   if (!state.results.length) {
     const row = document.createElement("tr");
     row.className = "empty-row";
-    row.innerHTML = "<td colspan=\"5\">No saved results</td>";
+    row.innerHTML = "<td colspan=\"10\">No saved results</td>";
     els.resultsBody.appendChild(row);
   } else {
     state.results.forEach((result, index) => {
@@ -1363,6 +1382,7 @@ function renderResults() {
         <td>${formatCell(result.height)}</td>
         <td>${formatCell(result.fwhm)}</td>
         <td>${formatCell(result.area)}</td>
+        ${result.averageHeights.map((value) => `<td>${value === null ? "" : formatCell(value)}</td>`).join("")}
       `;
       els.resultsBody.appendChild(row);
     });
@@ -1395,12 +1415,13 @@ function exportResultsCsv() {
   }
 
   const rows = [
-    ["Filename", "Height", "FWHM", "Area"],
+    ["Filename", "Height", "FWHM", "Area", "h1", "h2", "h3", "h4", "h5"],
     ...state.results.map((result) => [
       result.filename,
       formatCell(result.height),
       formatCell(result.fwhm),
-      formatCell(result.area)
+      formatCell(result.area),
+      ...result.averageHeights.map((value) => value === null ? "" : formatCell(value))
     ])
   ];
   const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
@@ -1470,6 +1491,10 @@ function updateResultsButtons() {
   const hasResults = state.results.length > 0;
   const hasSelected = state.results.some((result) => result.selected);
 
+  const latestResult = state.results[state.results.length - 1];
+  els.appendAverageBtn.disabled = !latestResult
+    || !Number.isFinite(state.metrics?.averageHeight)
+    || !latestResult.averageHeights.includes(null);
   els.deleteSelectedBtn.disabled = !hasSelected;
   els.clearResultsBtn.disabled = !hasResults;
   els.exportCsvBtn.disabled = !hasResults;

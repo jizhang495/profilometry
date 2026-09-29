@@ -163,23 +163,28 @@ class ProfilometryApp(tk.Tk):
         table_label = ttk.Label(right_frame, text="Saved Results", font=("TkDefaultFont", 12, "bold"))
         table_label.pack(side=tk.TOP, pady=(10,5))
         
-        columns = ("Filename", "Height", "FWHM", "Area")
+        columns = ("Filename", "Height", "FWHM", "Area", "h1", "h2", "h3", "h4", "h5")
         self.tree = ttk.Treeview(right_frame, columns=columns, show="headings")
         for col in columns:
             self.tree.heading(col, text=col)
             if col == "Filename":
-                self.tree.column(col, width=120, anchor=tk.W)
+                self.tree.column(col, width=120, minwidth=120, anchor=tk.W)
             else:
-                self.tree.column(col, width=80, anchor=tk.E)
+                self.tree.column(col, width=80, minwidth=80, anchor=tk.E)
                 
         tree_scroll = ttk.Scrollbar(right_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=tree_scroll.set)
         tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        tree_xscroll = ttk.Scrollbar(right_frame, orient=tk.HORIZONTAL, command=self.tree.xview)
+        self.tree.configure(xscrollcommand=tree_xscroll.set)
+        tree_xscroll.pack(side=tk.BOTTOM, fill=tk.X)
         self.tree.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         
         btn_frame = ttk.Frame(right_frame)
         btn_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=10)
         
+        ttk.Button(btn_frame, text="Append average height", command=self.append_average_height).pack(side=tk.TOP, fill=tk.X, padx=2, pady=2)
+
         row_btn1 = ttk.Frame(btn_frame)
         row_btn1.pack(side=tk.TOP, fill=tk.X, pady=2)
         ttk.Button(row_btn1, text="Add Data", command=self.add_to_table).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=2)
@@ -632,7 +637,25 @@ class ProfilometryApp(tk.Tk):
         f_str = f"{self.current_fwhm:.4f}" if self.current_fwhm is not None else "N/A"
         a_str = f"{self.current_area:.4f}" if self.current_area is not None else "N/A"
         
-        self.tree.insert("", tk.END, values=(filename_no_ext, h_str, f_str, a_str))
+        self.tree.insert("", tk.END, values=(filename_no_ext, h_str, f_str, a_str, "", "", "", "", ""))
+
+    def append_average_height(self):
+        children = self.tree.get_children()
+        if not children:
+            messagebox.showinfo("No Saved Row", "Click Add Data before appending an average height.")
+            return
+        if self.current_average_height is None or not np.isfinite(self.current_average_height):
+            messagebox.showinfo("No Average Height", "Drag on the bottom graph to measure average height first.")
+            return
+        item = children[-1]
+        values = list(self.tree.item(item, "values"))
+        for slot in range(4, 9):
+            if values[slot] == "":
+                values[slot] = f"{self.current_average_height:.4f}"
+                self.tree.item(item, values=values)
+                self.tree.see(item)
+                return
+        messagebox.showinfo("Row Full", "The latest row already has five average-height measurements.")
 
     def delete_selected(self):
         for item in self.tree.selection():
@@ -657,7 +680,7 @@ class ProfilometryApp(tk.Tk):
             records = []
             for item in children:
                 records.append(self.tree.item(item, 'values'))
-            df = pd.DataFrame(records, columns=["Filename", "Height", "FWHM", "Area"])
+            df = pd.DataFrame(records, columns=["Filename", "Height", "FWHM", "Area", "h1", "h2", "h3", "h4", "h5"])
             df.to_csv(save_path, index=False)
             messagebox.showinfo("Exported", f"Data exported to {save_path}")
 

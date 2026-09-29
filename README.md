@@ -74,7 +74,9 @@ run_web.bat
 6. Use **Data min/max** to visually truncate the matrix to a region of interest, or **Exclude BG min/max** to specifically ignore segments of data from background fitting calculations (plotted in gray).
 7. Enable **Denoise BG** to run a preliminary low pass filter against high spatial frequency variations before polynomial fitting.
 8. The Bottom Graph updates with the subtracted peak.
-9. Click **Add Data** to save the active peak's measurements to the tracking table. Export saved rows with **Export CSV**.
+9. Click **Add Data** to save the active peak's measurements to the tracking table, with **h1–h5** initially empty.
+10. Drag on the bottom graph to measure an average height, then click **Append average height** to save it to the next empty h1–h5 column of the most recently added row. Repeat with different regions for up to five measurements per row (in µm). This works in both the desktop and web apps; selecting table rows is only for deletion. Scroll the table horizontally to see all columns.
+11. Export saved rows with **Export CSV**, including h1–h5 and blank cells for measurements not yet appended.
 
 The web app stores loaded files and saved results in browser memory for the active page session. It is a static local app; CSV parsing, plotting, and analysis run in the browser.
 
