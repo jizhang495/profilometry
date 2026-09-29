@@ -75,7 +75,7 @@ run_web.bat
 7. Enable **Denoise BG** to run a preliminary low pass filter against high spatial frequency variations before polynomial fitting.
 8. The Bottom Graph updates with the subtracted peak.
 9. Click **Add Data** to save the active peak's measurements to the tracking table, with **h1–h5** initially empty.
-10. Drag on the bottom graph to measure an average height, then click **Append average height** to save it to the next empty h1–h5 column of the most recently added row. Repeat with different regions for up to five measurements per row (in µm). This works in both the desktop and web apps; selecting table rows is only for deletion. Scroll the table horizontally to see all columns.
+10. Drag on the bottom graph to measure an average height, then click **Append average height** to save it to the next empty h1–h5 column of the most recently added row. If the table is empty or that row belongs to a different file, the app automatically performs **Add Data** for the loaded file first, then appends **h1**. Files are matched by source, so identical filenames from different folders do not share a row. Repeat with different regions for up to five measurements per row (in µm). This works in both the desktop and web apps; selecting table rows is only for deletion. Scroll the table horizontally to see all columns.
 Each **Append average height** click also saves both plots as `<csv-name>-h1.svg` through `<csv-name>-h5.svg`, matching the appended column. The desktop app saves beside the loaded CSV; the web app starts a browser download. If SVG generation fails, the slot stays empty so you can retry.
 
 11. Export saved rows with **Export CSV**, including h1–h5 and blank cells for measurements not yet appended.

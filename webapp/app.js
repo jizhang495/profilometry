@@ -2,6 +2,7 @@ const state = {
   files: [],
   currentIndex: -1,
   currentName: "",
+  currentFile: null,
   fullX: [],
   fullY: [],
   x: [],
@@ -144,6 +145,7 @@ async function loadCurrentFile(index) {
 
     state.currentIndex = index;
     state.currentName = displayFileName(file);
+    state.currentFile = file;
     state.fullX = parsed.x;
     state.fullY = parsed.y;
     state.peakRegion = null;
@@ -1341,6 +1343,7 @@ function addCurrentResult() {
 
   state.results.push({
     selected: false,
+    sourceFile: state.currentFile,
     filename: stripExtension(baseFileName(state.currentName)),
     height: state.metrics.height,
     fwhm: state.metrics.fwhm,
@@ -1352,10 +1355,14 @@ function addCurrentResult() {
 
 async function appendAverageHeight() {
   if (state.appendingAverage) return;
-  const result = state.results[state.results.length - 1];
-  if (!result || !Number.isFinite(state.metrics?.averageHeight)) {
-    setStatus("Add Data and select an average-height region on the bottom graph first.", "warn");
+  if (!state.currentFile || !Number.isFinite(state.metrics?.averageHeight)) {
+    setStatus("Load a file and select an average-height region on the bottom graph first.", "warn");
     return;
+  }
+  let result = state.results[state.results.length - 1];
+  if (!result || result.sourceFile !== state.currentFile) {
+    addCurrentResult();
+    result = state.results[state.results.length - 1];
   }
   const slot = result.averageHeights.indexOf(null);
   if (slot === -1) {
@@ -1508,9 +1515,10 @@ function updateResultsButtons() {
   const hasSelected = state.results.some((result) => result.selected);
 
   const latestResult = state.results[state.results.length - 1];
-  els.appendAverageBtn.disabled = state.appendingAverage || !latestResult
+  const latestMatches = Boolean(latestResult && latestResult.sourceFile === state.currentFile);
+  els.appendAverageBtn.disabled = state.appendingAverage || !state.currentFile
     || !Number.isFinite(state.metrics?.averageHeight)
-    || !latestResult.averageHeights.includes(null);
+    || (latestMatches && !latestResult.averageHeights.includes(null));
   els.deleteSelectedBtn.disabled = !hasSelected;
   els.clearResultsBtn.disabled = !hasResults;
   els.exportCsvBtn.disabled = !hasResults;

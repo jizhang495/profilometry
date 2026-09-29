@@ -46,6 +46,7 @@ class ProfilometryApp(tk.Tk):
         self.x = None
         self.y = None
         self.filepath = None
+        self.result_sources = {}
         self.csv_files = []
         self.current_idx = 0
         self.peak_region = [None, None]
@@ -637,16 +638,20 @@ class ProfilometryApp(tk.Tk):
         f_str = f"{self.current_fwhm:.4f}" if self.current_fwhm is not None else "N/A"
         a_str = f"{self.current_area:.4f}" if self.current_area is not None else "N/A"
         
-        self.tree.insert("", tk.END, values=(filename_no_ext, h_str, f_str, a_str, "", "", "", "", ""))
+        item = self.tree.insert("", tk.END, values=(filename_no_ext, h_str, f_str, a_str, "", "", "", "", ""))
+        self.result_sources[item] = os.path.normcase(os.path.realpath(self.filepath))
 
     def append_average_height(self):
-        children = self.tree.get_children()
-        if not children:
-            messagebox.showinfo("No Saved Row", "Click Add Data before appending an average height.")
+        if not self.filepath:
             return
         if self.current_average_height is None or not np.isfinite(self.current_average_height):
             messagebox.showinfo("No Average Height", "Drag on the bottom graph to measure average height first.")
             return
+        children = self.tree.get_children()
+        source = os.path.normcase(os.path.realpath(self.filepath))
+        if not children or self.result_sources.get(children[-1]) != source:
+            self.add_to_table()
+            children = self.tree.get_children()
         item = children[-1]
         values = list(self.tree.item(item, "values"))
         for slot in range(4, 9):
@@ -666,10 +671,12 @@ class ProfilometryApp(tk.Tk):
     def delete_selected(self):
         for item in self.tree.selection():
             self.tree.delete(item)
+            self.result_sources.pop(item, None)
 
     def clear_table(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
+        self.result_sources.clear()
 
     def export_table(self):
         children = self.tree.get_children()
